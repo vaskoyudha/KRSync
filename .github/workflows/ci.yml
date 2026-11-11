@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-only-password
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check formatting
+        run: make check-fmt
+      - name: Build all packages
+        run: go build ./...
+      - name: Vet
+        run: make lint
+      - name: Unit tests
+        run: make test
+      - name: Transaction schema and seed (MySQL 8.0)
+        env:
+          TEST_DB_DSN: 'root:test-only-password@tcp(127.0.0.1:3306)/?parseTime=true&charset=utf8mb4'
+        run: make test-db
